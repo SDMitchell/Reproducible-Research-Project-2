@@ -60,7 +60,7 @@ acquireData <- function() {
 		# with just the features we want. This allows us to get rid of the noisy (and memory-heavy) REMARKS column. Plus
 		# the time columns are an error-filled mess that were obviously done by manual entry and are nigh unusable.
 		dataRaw <- read.csv(rawDataFilename, header=TRUE, sep=",", stringsAsFactors=FALSE, na.strings="NA")
-		dataSelection <- dataRaw[, c("BGN_DATE", "STATE", "EVTYPE", "END_DATE", "F", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP",  "CROPDMG", "CROPDMGEXP", "WFO")]
+		dataSelection <- dataRaw[, c("BGN_DATE", "STATE", "EVTYPE", "F", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP",  "CROPDMG", "CROPDMGEXP", "WFO")]
 		saveRDS(dataSelection, cacheFilename)
 	}
 	else
@@ -73,19 +73,38 @@ acquireData <- function() {
 originalData <- acquireData()
 ```
   
-In the interest of starting with a tidy data set, we can compact the property damage and crop damage columns by simply multiplying them by their proper exponent column.
+In the interest of starting with a tidy data set, we can compact the property damage and crop damage columns by simply multiplying them by their proper exponent column. There are a lot of problems in the exponents column with many entries not matching the documented accepted values, so some assumptions must be made.
   
- ```r{}
- ```
- 
- 
-Should clean this data up
-* Combine begin/end dates into one field each
-* Convery damage into a single column, taking into account its multiplier
-* Keep state, evttype, fatalities, injuries, damage+exp, WFO (Weather Forecast Office), F (Fujita scale for Tornados), 
-MAG (Magnitude of the event? Magnetometer readings? Model Analyses and Guidance?) I looked at it as Magnetometer readings, but it isn't definitive enough.
-* Drop all other features
+Invalid Exponent | Assumed Value
+-------- | --------
+- | 1000
++ | 1000000
+? | 0
+h/H | 100
+Numeric | equivalent number
+empty string | 0
 
+```{r}
+exponent <- as.data.frame(c(3, 6, 0, 9, 6, 6, 0, 5, 6, 0, 4, 2, 3, 2, 7, 2, 3, 1, 8, 3))
+colnames(exponent) <- c("exponent")
+rownames(exponent) <- c("K", "M", "", "B", "m", "+", "0", "5", "6", "?", "4", "2", "3", "h", "7", "H", "-", "1", "8", "k")
+originalData[originalData$PROPDMGEXP=="", "PROPDMGEXP"] <- "0"
+originalData[originalData$CROPDMGEXP=="", "CROPDMGEXP"] <- "0"
+
+originalData$realPropDamage <- originalData$PROPDMG * 10^exponent[originalData$PROPDMGEXP, ]
+originalData$realCropDamage <- originalData$CROPDMG * 10^exponent[originalData$CROPDMGEXP, ]
+
+List of valid states, according to ANSI
+validStates <- c("AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV,WI", "WY", "AS", "GU", "MP", "PR", "VI", "UM", "FM", "MH", "PW")
+
+totalCropDamageByState <- aggregate(realCropDamage~STATE, data=originalData, FUN=sum)
+totalCropDamageByState <- totalCropDamageByState[totalCropDamageByState$STATE %in% validStates,]
+
+totalPropDamageByState <- aggregate(realPropDamage~STATE, data=originalData, FUN=sum)
+totalPropDamageByState <- totalPropDamageByState[totalPropDamageByState$STATE %in% validStates,]
+
+```
+  
 ## Results
 
 * Top 10 list of fatalities/injuries by state
