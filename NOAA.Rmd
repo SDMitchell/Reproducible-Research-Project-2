@@ -1,0 +1,105 @@
+---
+title: "NOAA Weather Data Analysis 1950-2001"
+author: "SDMitchell"
+date: "August 15, 2015"
+output: 
+  html_document:
+    keep_md: true
+---
+
+
+## Synopsis
+	Immediately after the title, there should be a synopsis which describes and summarizes your analysis in at most 10 complete sentences.
+	
+    1. Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+
+    2. Across the United States, which types of events have the greatest economic consequences?
+	
+
+## Data Processing
+
+
+```{r echo=FALSE, warning=FALSE}
+library(ggplot2)
+library(tools)
+library(lubridate)
+options(digits=2, scipen=1)
+```
+
+These variables are for our target data on the internet and our starting filenames.
+  
+```{r}
+cacheFilename <- "repdata_data_StormData.rds"
+rawDataFilename <- "repdata_data_StormData.csv.bz2"
+targetURL <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+```
+  
+We'll start the data cleaning process by abbreviating the data set to one that continas only the features of interest. Once we have this set we store it on disk as a serialized R object for future use (and much shorter startup times). We store this data set in the variable "originalData".
+  
+```{r}
+acquireData <- function() {
+	# Try to download the given file if our input file does not already exist
+	if(!file.exists(cacheFilename))
+	{
+		# If the input data file doesn't exist yet, we need to download it
+		if(!file.exists(rawDataFilename))
+		{
+			download.file(url=targetURL, destfile=rawDataFilename, method="auto", mode="wb")
+		}
+	
+		if(file.exists(rawDataFilename))
+		{
+			# Record the downloaded file's MD5 sum; this file's creation date can serve as the downloaded date
+			write(md5sum(rawDataFilename), paste(rawDataFilename, ".MD5", sep=""))
+		}
+		else
+		{
+			stop("There was a problem attempting to download the file from the given URL")
+		}
+		# We either have the raw data file or it was already on disk. So here we are going to create an abbreviate data set
+		# with just the features we want. This allows us to get rid of the noisy (and memory-heavy) REMARKS column. Plus
+		# the time columns are an error-filled mess that were obviously done by manual entry and are nigh unusable.
+		dataRaw <- read.csv(rawDataFilename, header=TRUE, sep=",", stringsAsFactors=FALSE, na.strings="NA")
+		dataSelection <- dataRaw[, c("BGN_DATE", "STATE", "EVTYPE", "END_DATE", "F", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP",  "CROPDMG", "CROPDMGEXP", "WFO")]
+		saveRDS(dataSelection, cacheFilename)
+	}
+	else
+	{
+		dataSelection <- readRDS(cacheFilename)
+	}
+	
+	dataSelection
+}
+originalData <- acquireData()
+```
+  
+In the interest of starting with a tidy data set, we can compact the property damage and crop damage columns by simply multiplying them by their proper exponent column.
+  
+ ```r{}
+ ```
+ 
+ 
+Should clean this data up
+* Combine begin/end dates into one field each
+* Convery damage into a single column, taking into account its multiplier
+* Keep state, evttype, fatalities, injuries, damage+exp, WFO (Weather Forecast Office), F (Fujita scale for Tornados), 
+MAG (Magnitude of the event? Magnetometer readings? Model Analyses and Guidance?) I looked at it as Magnetometer readings, but it isn't definitive enough.
+* Drop all other features
+
+## Results
+
+* Top 10 list of fatalities/injuries by state
+* Top 10 list of damage costs by state
+* Top overall
+Talk about bang-for-the-buck as to [what type of event and where] that money should be invested
+
+
+
+    The analysis document must have at least one figure containing a plot.
+
+    Your analyis must have no more than three figures. Figures may have multiple plots in them (i.e. panel plots), but there cannot be more than three figures total.
+
+    You must show all your code for the work in your analysis document. This may make the document a bit verbose, but that is okay. In general, you should ensure that echo = TRUE for every code chunk (this is the default setting in knitr).
+  
+## About the Data
+Filenames, MD5, Sys,info(), sessionInfo()
