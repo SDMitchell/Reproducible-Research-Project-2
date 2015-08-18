@@ -94,7 +94,7 @@ originalData[originalData$CROPDMGEXP=="", "CROPDMGEXP"] <- "0"
 originalData$realPropDamage <- originalData$PROPDMG * 10^exponent[originalData$PROPDMGEXP, ]
 originalData$realCropDamage <- originalData$CROPDMG * 10^exponent[originalData$CROPDMGEXP, ]
 
-List of valid states, according to ANSI
+# List of valid states, according to ANSI
 validStates <- c("AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV,WI", "WY", "AS", "GU", "MP", "PR", "VI", "UM", "FM", "MH", "PW")
 
 totalCropDamageByState <- aggregate(realCropDamage~STATE, data=originalData, FUN=sum)
