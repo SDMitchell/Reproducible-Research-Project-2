@@ -19,7 +19,7 @@ output:
 ## Data Processing
 
 
-```{r echo=FALSE, warning=FALSE}
+```{r Libraries,echo=FALSE, warning=FALSE}
 library(ggplot2)
 library(tools)
 library(lubridate)
@@ -28,7 +28,7 @@ options(digits=2, scipen=1)
 
 These variables are for our target data on the internet and our starting filenames.
   
-```{r}
+```{r Variables}
 cacheFilename <- "repdata_data_StormData.rds"
 rawDataFilename <- "repdata_data_StormData.csv.bz2"
 targetURL <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
@@ -36,7 +36,7 @@ targetURL <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.c
   
 We'll start the data cleaning process by abbreviating the data set to one that continas only the features of interest. Once we have this set we store it on disk as a serialized R object for future use (and much shorter startup times). We store this data set in the variable "originalData".
   
-```{r}
+```{r Data Acquisition}
 acquireData <- function() {
 	# Try to download the given file if our input file does not already exist
 	if(!file.exists(cacheFilename))
@@ -84,7 +84,7 @@ h/H | 100
 Numeric | equivalent number
 empty string | 0
 
-```{r}
+```{r Data Cleaning Phase 1}
 # Create a mapping of data set value to exponent that we are going to assume it represents
 exponent <- as.data.frame(c(3, 6, 0, 9, 6, 6, 0, 5, 6, 0, 4, 2, 3, 2, 7, 2, 3, 1, 8, 3))
 colnames(exponent) <- c("exponent")
@@ -115,17 +115,19 @@ The next issue has to do with the EVTYPE field. There are many unique fields her
 Category | Expression
 --------|--------------
 Tornado | TORNADO or FUNNEL
-Large summer storm | HURRICANE
-Tidal / Coastal | TSUNAMI or SURGE or TIDE or SURF or SEAS
-Lightning | LIGHTNING
-Wind | WIND
+Large summer storm | HURRICANE or TROPICAL STORM or TYPHOON
+Tidal / Coastal | TSUNAMI or SURGE or TIDE or SURF or SEAS or MARINE or RIP CURRENT or WAVE or SWELL
+Lightning | LIGHTNING or LIGHTING or THUNDER
+Wind | WIND or MICROBURST
+Flooding | FLOOD or WATER or RAIN or PRECIP
+Winter storm / Cold | BLIZZARD or SNOW or COLD or FREEZE or CHILL or ICE or HYPOTHERMIA or SLEET or WINTER or LOW TEMP or RECORD LOW or FROST
+Heat / Fire | HEAT or DROUGHT or FIRE or HIGH TEMP or RECORD HIGH or HYPERTHERMIA or HOT
+Dust / Fog / Smoke | DUST or FOG or SMOKE
 Hail | HAIL
-Flooding | FLOOD or WATER or RAIN
-Winter storm / Cold | BLIZZARD or SNOW or COLD or FREEZE or CHILL or ICE or HYPOTHERMIA or SLEET
-Heat / Fire | HEAT or DROUGHT or FIRE
+Avalanche / Mudslide | AVALANCHE or (?:LAND or MUD)SLIDE
 Other | Everything else
 
-```{r}
+```{r Data Cleaning Phase 2}
 # This takes a minute to run - it has a lot of work to do (regexes are not cheap and this is running over 800K of them).
 originalData$eventType <- toupper(mapply(FUN=gsub, originalData$EVTYPE, MoreArgs=list(pattern="^\\s+(.*?)\\s*$", replacement="\\1", perl=TRUE), USE.NAMES=FALSE))
 
@@ -136,11 +138,11 @@ classifyEventType <- function(s) {
 	{
 		result <- "Tornado"
 	}
-	else if (grepl("HURRICANE|TROPICAL STORM", s))
+	else if (grepl("HURRICANE|TROPICAL STORM|TYPHOON", s))
 	{
 		result <- "Hurricane"
 	}
-	else if (grepl("TSUNAMI|SURGE|TIDE|SURF|SEAS|MARINE|RIP CURRENT", s))
+	else if (grepl("TSUNAMI|SURGE|TIDE|SURF|SEAS|MARINE|RIP CURRENT|WAVE|SWELL", s))
 	{
 		result <- "Tidal / Coastal"
 	}
@@ -156,17 +158,21 @@ classifyEventType <- function(s) {
 	{
 		result <- "Flooding / Water"
 	}
-	else if (grepl("BLIZZARD|SNOW|COLD|FREEZE|CHILL|ICE|HYPOTHERMIA|SLEET|WINTER|LOW TEMP|RECORD LOW", s))
+	else if (grepl("BLIZZARD|SNOW|COLD|FREEZE|CHILL|ICE|HYPOTHERMIA|SLEET|WINTER|LOW TEMP|RECORD LOW|FROST", s))
 	{
 		result <- "Winter Storm / Cold"
 	}
-	else if (grepl("HEAT|DROUGHT|FIRE|HIGH TEMP|RECORD HIGH", s))
+	else if (grepl("HEAT|DROUGHT|FIRE|HIGH TEMP|RECORD HIGH|HYPERTHERMIA|HOT", s))
 	{
 		result <- "Heat / Fire"
 	}
-	else if (grepl("DUST|FOG", s))
+	else if (grepl("DUST|FOG|SMOKE", s))
 	{
-		result <- "Dust / Fog"
+		result <- "Dust / Fog / Smoke"
+	}
+	else if (grepl("HAIL", s))
+	{
+		result <- "Hail"
 	}
 	else if (grepl("AVALANCHE|(?:LAND|MUD)SLIDE", s))
 	{
@@ -179,9 +185,24 @@ originalData$eventClassification <- mapply(FUN=classifyEventType, originalData$e
 
 fatalityCount <- aggregate(FATALITIES~eventClassification, data=originalData, FUN=sum)
 fatalityCount <- fatalityCount[order(fatalityCount$FATALITIES, decreasing=T), ]
+injuryCount <- aggregate(INJURIES~eventClassification, data=originalData, FUN=sum)
+injuryCount <- injuryCount[order(injuryCount$INJURIES, decreasing=T), ]
+
+propertyDamageAmount <- aggregate(realPropDamage~eventClassification, data=originalData, FUN=sum)
+propertyDamageAmount <- propertyDamageAmount[order(propertyDamageAmount$realPropDamage, decreasing=T), ]
+cropDamageAmount <- aggregate(realCropDamage~eventClassification, data=originalData, FUN=sum)
+cropDamageAmount <- cropDamageAmount[order(cropDamageAmount$realCropDamage, decreasing=T), ]
+
+
 bp <- barplot(fatalityCount$FATALITIES)
 text(cex=1, x=bp-.25, y=-1.25, fatalityCount$eventClassification, xpd=TRUE, srt=45, pos=2)
+bp <- barplot(injuryCount$INJURIES)
+text(cex=1, x=bp-.25, y=-1.25, injuryCount$eventClassification, xpd=TRUE, srt=45, pos=2)
 
+bp <- barplot(propertyDamageAmount$realPropDamage)
+text(cex=1, x=bp-.25, y=-1.25, propertyDamageAmount$eventClassification, xpd=TRUE, srt=45, pos=2)
+bp <- barplot(cropDamageAmount$realCropDamage)
+text(cex=1, x=bp-.25, y=-1.25, cropDamageAmount$eventClassification, xpd=TRUE, srt=45, pos=2)
 ```
 
 ## Results
@@ -203,3 +224,19 @@ Talk about bang-for-the-buck as to [what type of event and where] that money sho
 Filenames, MD5, Sys,info(), sessionInfo()
 Ref states abbreviations here: https://en.wikipedia.org/wiki/List_of_U.S._state_abbreviations
 
+  
+### What is "Other"?
+This is just a quickie function to list all of the classifications that fall into the "Other" category. There are many of them, but most are summary data and mis-spellings of terms that would have been caught by the classification algorithm if they were correct. Some are rare enough or non-specific enough to deserve the "Other" classification.
+  
+```{r whatIsOther}
+whatIsOther <- function(eventTypeData) {
+other <- as.data.frame(unique(eventTypeData), stringsAsFactors=FALSE)
+colnames(other) <- c("type")
+other$classification <- mapply(FUN=classifyEventType, unique(eventTypeData), USE.NAMES=FALSE)
+other <- other[other$classification == "Other", "type"]
+other
+}
+whatIsOther(originalData$eventType)
+```
+  
+  
