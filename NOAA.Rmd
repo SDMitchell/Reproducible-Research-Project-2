@@ -85,26 +85,105 @@ Numeric | equivalent number
 empty string | 0
 
 ```{r}
+# Create a mapping of data set value to exponent that we are going to assume it represents
 exponent <- as.data.frame(c(3, 6, 0, 9, 6, 6, 0, 5, 6, 0, 4, 2, 3, 2, 7, 2, 3, 1, 8, 3))
 colnames(exponent) <- c("exponent")
 rownames(exponent) <- c("K", "M", "", "B", "m", "+", "0", "5", "6", "?", "4", "2", "3", "h", "7", "H", "-", "1", "8", "k")
 originalData[originalData$PROPDMGEXP=="", "PROPDMGEXP"] <- "0"
 originalData[originalData$CROPDMGEXP=="", "CROPDMGEXP"] <- "0"
 
+# Compute the actual damage values and bind the new columns to the data frame
 originalData$realPropDamage <- originalData$PROPDMG * 10^exponent[originalData$PROPDMGEXP, ]
 originalData$realCropDamage <- originalData$CROPDMG * 10^exponent[originalData$CROPDMGEXP, ]
 
-# List of valid states, according to ANSI
-validStates <- c("AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV,WI", "WY", "AS", "GU", "MP", "PR", "VI", "UM", "FM", "MH", "PW")
+# List of valid states, according to ANSI, here: https://en.wikipedia.org/wiki/List_of_U.S._state_abbreviations
+validStates <- c("AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "AS", "GU", "MP", "PR", "VI", "UM", "FM", "MH", "PW")
 
+# We need to weed out any rows with an invalid STATE. There is likely a better way to do this...
 totalCropDamageByState <- aggregate(realCropDamage~STATE, data=originalData, FUN=sum)
-totalCropDamageByState <- totalCropDamageByState[totalCropDamageByState$STATE %in% validStates,]
+invalidRecordsBecauseOfState <- dim(originalData[(originalData$STATE %in% setdiff(totalCropDamageByState$STATE, validStates)), ])[1]
+percentageInvalidRecordsBecauseOfState <- invalidRecordsBecauseOfState/dim(originalData)[1] * 100
 
-totalPropDamageByState <- aggregate(realPropDamage~STATE, data=originalData, FUN=sum)
-totalPropDamageByState <- totalPropDamageByState[totalPropDamageByState$STATE %in% validStates,]
-
+# Replace our current data set with one that has the bad records removed
+originalData <- originalData[!(originalData$STATE %in% setdiff(totalCropDamageByState$STATE, validStates)),]
 ```
   
+Our data also has a problem with invalid states which we cannot easily work around; we computed the number of invalid rows (`r invalidRecordsBecauseOfState` rows) and decided that due to them being a small percentage of the overall data set (`r percentageInvalidRecordsBecauseOfState`%) that it was likely valid to remove them altogether.
+  
+The next issue has to do with the EVTYPE field. There are many unique fields here and most of them are redundant. The strategy will be to organize these into groupings with regular expression matches with an "Other" category to capture everything that doesn't fall within a chosen grouping. To make sure that we catch as much as possible, a new column called eventType will be added to the data frame where the EVTYPE field is upper-cased and trimmed of any leading/trailing spaces.
+  
+Category | Expression
+--------|--------------
+Tornado | TORNADO or FUNNEL
+Large summer storm | HURRICANE
+Tidal / Coastal | TSUNAMI or SURGE or TIDE or SURF or SEAS
+Lightning | LIGHTNING
+Wind | WIND
+Hail | HAIL
+Flooding | FLOOD or WATER or RAIN
+Winter storm / Cold | BLIZZARD or SNOW or COLD or FREEZE or CHILL or ICE or HYPOTHERMIA or SLEET
+Heat / Fire | HEAT or DROUGHT or FIRE
+Other | Everything else
+
+```{r}
+# This takes a minute to run - it has a lot of work to do (regexes are not cheap and this is running over 800K of them).
+originalData$eventType <- toupper(mapply(FUN=gsub, originalData$EVTYPE, MoreArgs=list(pattern="^\\s+(.*?)\\s*$", replacement="\\1", perl=TRUE), USE.NAMES=FALSE))
+
+# This is also not going to be cheap, because it is going to run even more regexes.
+classifyEventType <- function(s) {
+	result <- "Other"
+	if(grepl("TORNADO|FUNNEL", s))
+	{
+		result <- "Tornado"
+	}
+	else if (grepl("HURRICANE|TROPICAL STORM", s))
+	{
+		result <- "Hurricane"
+	}
+	else if (grepl("TSUNAMI|SURGE|TIDE|SURF|SEAS|MARINE|RIP CURRENT", s))
+	{
+		result <- "Tidal / Coastal"
+	}
+	else if (grepl("LIGHTNING|LIGHTING|THUNDER", s))
+	{
+		result <- "Lightning"
+	}
+	else if (grepl("WIND|MICROBURST", s))
+	{
+		result <- "Wind / Microburst"
+	}
+	else if (grepl("FLOOD|WATER|RAIN|PRECIP", s))
+	{
+		result <- "Flooding / Water"
+	}
+	else if (grepl("BLIZZARD|SNOW|COLD|FREEZE|CHILL|ICE|HYPOTHERMIA|SLEET|WINTER|LOW TEMP|RECORD LOW", s))
+	{
+		result <- "Winter Storm / Cold"
+	}
+	else if (grepl("HEAT|DROUGHT|FIRE|HIGH TEMP|RECORD HIGH", s))
+	{
+		result <- "Heat / Fire"
+	}
+	else if (grepl("DUST|FOG", s))
+	{
+		result <- "Dust / Fog"
+	}
+	else if (grepl("AVALANCHE|(?:LAND|MUD)SLIDE", s))
+	{
+		result <- "Avalanche / Mudslide"
+	}
+	result
+}
+originalData$eventClassification <- mapply(FUN=classifyEventType, originalData$eventType, USE.NAMES=FALSE)
+
+
+fatalityCount <- aggregate(FATALITIES~eventClassification, data=originalData, FUN=sum)
+fatalityCount <- fatalityCount[order(fatalityCount$FATALITIES, decreasing=T), ]
+bp <- barplot(fatalityCount$FATALITIES)
+text(cex=1, x=bp-.25, y=-1.25, fatalityCount$eventClassification, xpd=TRUE, srt=45, pos=2)
+
+```
+
 ## Results
 
 * Top 10 list of fatalities/injuries by state
@@ -122,3 +201,5 @@ Talk about bang-for-the-buck as to [what type of event and where] that money sho
   
 ## About the Data
 Filenames, MD5, Sys,info(), sessionInfo()
+Ref states abbreviations here: https://en.wikipedia.org/wiki/List_of_U.S._state_abbreviations
+
