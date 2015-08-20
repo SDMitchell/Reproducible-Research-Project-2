@@ -19,10 +19,12 @@ output:
 ## Data Processing
 
 
-```{r Libraries,echo=FALSE, warning=FALSE}
+```{r Libraries,echo=FALSE, warning=FALSE, error=FALSE, message=FALSE}
 library(ggplot2)
 library(tools)
 library(lubridate)
+library(reshape2)
+library(plyr)
 options(digits=2, scipen=1)
 ```
 
@@ -182,30 +184,56 @@ classifyEventType <- function(s) {
 }
 originalData$eventClassification <- mapply(FUN=classifyEventType, originalData$eventType, USE.NAMES=FALSE)
 
-
+# This is used for the population plot
 fatalityCount <- aggregate(FATALITIES~eventClassification, data=originalData, FUN=sum)
 fatalityCount <- fatalityCount[order(fatalityCount$FATALITIES, decreasing=T), ]
 injuryCount <- aggregate(INJURIES~eventClassification, data=originalData, FUN=sum)
 injuryCount <- injuryCount[order(injuryCount$INJURIES, decreasing=T), ]
+populationHealthData <- melt(merge(fatalityCount, injuryCount, by= "eventClassification"), id.vars=c("eventClassification"))
 
+# This is used for the economic impact plot
 propertyDamageAmount <- aggregate(realPropDamage~eventClassification, data=originalData, FUN=sum)
 propertyDamageAmount <- propertyDamageAmount[order(propertyDamageAmount$realPropDamage, decreasing=T), ]
 cropDamageAmount <- aggregate(realCropDamage~eventClassification, data=originalData, FUN=sum)
 cropDamageAmount <- cropDamageAmount[order(cropDamageAmount$realCropDamage, decreasing=T), ]
-
-
-bp <- barplot(fatalityCount$FATALITIES)
-text(cex=1, x=bp-.25, y=-1.25, fatalityCount$eventClassification, xpd=TRUE, srt=45, pos=2)
-bp <- barplot(injuryCount$INJURIES)
-text(cex=1, x=bp-.25, y=-1.25, injuryCount$eventClassification, xpd=TRUE, srt=45, pos=2)
-
-bp <- barplot(propertyDamageAmount$realPropDamage)
-text(cex=1, x=bp-.25, y=-1.25, propertyDamageAmount$eventClassification, xpd=TRUE, srt=45, pos=2)
-bp <- barplot(cropDamageAmount$realCropDamage)
-text(cex=1, x=bp-.25, y=-1.25, cropDamageAmount$eventClassification, xpd=TRUE, srt=45, pos=2)
+economicHealthData <-melt(merge(propertyDamageAmount, cropDamageAmount, by= "eventClassification"), id.vars=c("eventClassification"))
 ```
 
 ## Results
+```{r Results, fig.width=12}
+
+# Stacked bar plot fatality/injury
+g <- ggplot(populationHealthData, aes(eventClassification, value/1000, order=desc(variable)))
+g <- g + geom_bar(stat="identity", aes(fill=variable), colour="black") +
+	labs(x = "Event Type", y = "Victims (Thousands)", fill="Incident Type", title="US Total Victims Per Weather Phenomenon 1950 - 2011") +
+	scale_fill_discrete(labels=c("Fatalities", "Injuries")) +
+	theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1), 
+		  legend.background = element_rect(fill = "#FFFAF0", colour = "#000000"), 
+		  legend.position = c(1,1), legend.justification = c( 1,1),
+		  panel.background = element_rect(fill = "#FFFAF0", colour = "#000000"), 
+		  panel.background = element_rect(fill = "#FFFAF0", colour = "#000000"), 
+		  plot.background = element_rect(fill = "#FFFAF0", colour = "#000000"), 
+		  panel.grid.major = element_line(colour="#FFDEAD"))
+g
+
+
+# Stacked bar plot prop/crop damage
+g <- ggplot(economicHealthData, aes(eventClassification, value/1000000000))
+g <- g + geom_bar(stat="identity", aes(fill=variable), colour="black") +
+	guides(fill = guide_legend(reverse = TRUE)) +
+	labs(x = "Event Type", y = "Cost (USD Billions, non-adjusted)", fill="Damage Type", title="US Total Cost Per Weather Phenomenon 1950 - 2011") +
+	scale_fill_discrete(labels=c("Property", "Crop")) +
+	theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1), 
+		  legend.background = element_rect(fill = "#FFFAF0", colour = "#000000"), 
+		  legend.position = c(1,1), legend.justification = c( 1,1),
+		  panel.background = element_rect(fill = "#FFFAF0", colour = "#000000"), 
+		  panel.background = element_rect(fill = "#FFFAF0", colour = "#000000"), 
+		  plot.background = element_rect(fill = "#FFFAF0", colour = "#000000"), 
+		  panel.grid.major = element_line(colour="#FFDEAD"))
+g
+```
+
+
 
 * Top 10 list of fatalities/injuries by state
 * Top 10 list of damage costs by state
