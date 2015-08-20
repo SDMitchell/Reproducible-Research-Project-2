@@ -388,7 +388,12 @@ g &lt;- g + geom_map(map=states_map, colour =&quot;black&quot;) +
     scale_fill_gradient2(low=pal[1], mid=pal[3], high=pal[5], midpoint=median(dfTornadoVictimsByState$victims)) +
     labs(x = &quot;Longitude (deg)&quot;, y = &quot;Latitude (Deg)&quot;, fill=&quot;Victims&quot;, title=&quot;US Per-State Victims Due To Tornado-Related Weather Affects 1950-2011&quot;) +
     expand_limits(x = states_map$long, y = states_map$lat) +
-    coord_map(&quot;polyconic&quot;)
+    coord_map(&quot;polyconic&quot;) +
+    theme(legend.background = element_rect(fill = &quot;#FFFAF0&quot;, colour = &quot;#000000&quot;), 
+          panel.background = element_rect(fill = &quot;#FFFAF0&quot;, colour = &quot;#000000&quot;), 
+          panel.background = element_rect(fill = &quot;#FFFAF0&quot;, colour = &quot;#000000&quot;), 
+          plot.background = element_rect(fill = &quot;#FFFAF0&quot;, colour = &quot;#000000&quot;), 
+          panel.grid.major = element_line(colour=&quot;#FFDEAD&quot;))
 g</code></pre>
 <p><img src="NOAA_files/figure-html/Tornado%20Victim%20Count-1.png" /></p>
 <pre class="r"><code>head(dfTornadoVictimsByState[order(dfTornadoVictimsByState$victims, decreasing=T), c(&quot;stateName&quot;, &quot;state&quot;, &quot;victims&quot;)], 10)</code></pre>
@@ -443,7 +448,12 @@ g &lt;- g + geom_map(map=states_map, colour =&quot;black&quot;) +
     scale_fill_gradient2(low=pal[1], mid=pal[3], high=pal[5], midpoint=median(log(dfWaterDamageByState$cost))) +
     labs(x = &quot;Longitude (deg)&quot;, y = &quot;Latitude (Deg)&quot;, fill=&quot;Log-Cost&quot;, title=&quot;US Per-State Cost Due To Water-Related Weather Affects 1950-2011&quot;) +
     expand_limits(x = states_map$long, y = states_map$lat) +
-    coord_map(&quot;polyconic&quot;)
+    coord_map(&quot;polyconic&quot;) +
+    theme(legend.background = element_rect(fill = &quot;#FFFAF0&quot;, colour = &quot;#000000&quot;), 
+          panel.background = element_rect(fill = &quot;#FFFAF0&quot;, colour = &quot;#000000&quot;), 
+          panel.background = element_rect(fill = &quot;#FFFAF0&quot;, colour = &quot;#000000&quot;), 
+          plot.background = element_rect(fill = &quot;#FFFAF0&quot;, colour = &quot;#000000&quot;), 
+          panel.grid.major = element_line(colour=&quot;#FFDEAD&quot;))
 g</code></pre>
 <p><img src="NOAA_files/figure-html/Economic%20Impact%20Chloropleth-1.png" /></p>
 <pre class="r"><code>head(dfWaterDamageByState[order(dfWaterDamageByState$cost, decreasing=T), c(&quot;stateName&quot;, &quot;state&quot;, &quot;cost&quot;)], 10)</code></pre>

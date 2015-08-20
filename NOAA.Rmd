@@ -272,7 +272,12 @@ g <- g + geom_map(map=states_map, colour ="black") +
 	scale_fill_gradient2(low=pal[1], mid=pal[3], high=pal[5], midpoint=median(dfTornadoVictimsByState$victims)) +
 	labs(x = "Longitude (deg)", y = "Latitude (Deg)", fill="Victims", title="US Per-State Victims Due To Tornado-Related Weather Affects 1950-2011") +
 	expand_limits(x = states_map$long, y = states_map$lat) +
-	coord_map("polyconic")
+	coord_map("polyconic") +
+	theme(legend.background = element_rect(fill = "#FFFAF0", colour = "#000000"), 
+		  panel.background = element_rect(fill = "#FFFAF0", colour = "#000000"), 
+		  panel.background = element_rect(fill = "#FFFAF0", colour = "#000000"), 
+		  plot.background = element_rect(fill = "#FFFAF0", colour = "#000000"), 
+		  panel.grid.major = element_line(colour="#FFDEAD"))
 g
 ```
   
@@ -316,7 +321,12 @@ g <- g + geom_map(map=states_map, colour ="black") +
 	scale_fill_gradient2(low=pal[1], mid=pal[3], high=pal[5], midpoint=median(log(dfWaterDamageByState$cost))) +
 	labs(x = "Longitude (deg)", y = "Latitude (Deg)", fill="Log-Cost", title="US Per-State Cost Due To Water-Related Weather Affects 1950-2011") +
 	expand_limits(x = states_map$long, y = states_map$lat) +
-	coord_map("polyconic")
+	coord_map("polyconic") +
+	theme(legend.background = element_rect(fill = "#FFFAF0", colour = "#000000"), 
+		  panel.background = element_rect(fill = "#FFFAF0", colour = "#000000"), 
+		  panel.background = element_rect(fill = "#FFFAF0", colour = "#000000"), 
+		  plot.background = element_rect(fill = "#FFFAF0", colour = "#000000"), 
+		  panel.grid.major = element_line(colour="#FFDEAD"))
 g
 ```
   
