@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+
+<meta name="author" content="SDMitchell" />
+
+<meta name="date" content="2015-08-15" />
+
+<title>NOAA Weather Data Analysis 1950-2001</title>
+
+<script src="NOAA_files/jquery-1.11.0/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="NOAA_files/bootstrap-3.3.1/css/bootstrap.min.css" rel="stylesheet" />
+<script src="NOAA_files/bootstrap-3.3.1/js/bootstrap.min.js"></script>
+<script src="NOAA_files/bootstrap-3.3.1/shim/html5shiv.min.js"></script>
+<script src="NOAA_files/bootstrap-3.3.1/shim/respond.min.js"></script>
+
+<style type="text/css">code{white-space: pre;}</style>
+<link rel="stylesheet"
+      href="NOAA_files/highlight/default.css"
+      type="text/css" />
+<script src="NOAA_files/highlight/highlight.js"></script>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs && document.readyState && document.readyState === "complete") {
+   window.setTimeout(function() {
+      hljs.initHighlighting();
+   }, 0);
+}
+</script>
+
+
+
+</head>
+
+<body>
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img { 
+  max-width:100%; 
+  height: auto; 
+}
+</style>
+<div class="container-fluid main-container">
+
+
+<div id="header">
+<h1 class="title">NOAA Weather Data Analysis 1950-2001</h1>
+<h4 class="author"><em>SDMitchell</em></h4>
+<h4 class="date"><em>August 15, 2015</em></h4>
+</div>
+
+
+<div id="synopsis" class="section level2">
+<h2>Synopsis</h2>
+<p>This report will attempt to analyze event data in the NOAA Storm Data database. This database contains data for the United States from the years 1950 through 2011 inclusive; the analysis will consist of attempting to answer the following two questions:</p>
+<ol style="list-style-type: decimal">
+<li><p>Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?</p></li>
+<li><p>Across the United States, which types of events have the greatest economic consequences?</p></li>
+</ol>
+<hr />
+<p>Points of note</p>
+<ul>
+<li>The code for fetching, extracting and caching relevant portions of the data is all included as part of the analysis;</li>
+<li>It is important to note that all dollar amounts are in US dollars and are <em>NOT</em> adjusted for inflation.</li>
+</ul>
+</div>
+<div id="data-processing" class="section level2">
+<h2>Data Processing</h2>
+<p>The following libraries are needed for this analysis and it is assumed that they are already installed (via install.packages) if any reproduction is being attempted:</p>
+<pre class="r"><code>library(ggplot2)
+library(tools)
+library(lubridate)
+library(reshape2)
+library(plyr)
+library(maps)
+library(mapproj)
+
+options(digits=2, scipen=1)</code></pre>
+<p>These variables are for our target data on the internet and our starting filenames.</p>
+<pre class="r"><code>cacheFilename &lt;- &quot;repdata_data_StormData.rds&quot;
+rawDataFilename &lt;- &quot;repdata_data_StormData.csv.bz2&quot;
+targetURL &lt;- &quot;https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2&quot;</code></pre>
+<p>We’ll start the data cleaning process by abbreviating the data set to one that continas only the features of interest. Once we have this set we store it on disk as a serialized R object for future use (and much shorter startup times). We store this data set in the variable “originalData”.</p>
+<pre class="r"><code>acquireData &lt;- function() {
+    # Try to download the given file if our input file does not already exist
+    if(!file.exists(cacheFilename))
+    {
+        # If the input data file doesn&#39;t exist yet, we need to download it
+        if(!file.exists(rawDataFilename))
+        {
+            download.file(url=targetURL, destfile=rawDataFilename, method=&quot;auto&quot;, mode=&quot;wb&quot;)
+        }
+    
+        if(file.exists(rawDataFilename))
+        {
+            # Record the downloaded file&#39;s MD5 sum; this file&#39;s creation date can serve as the downloaded date
+            write(md5sum(rawDataFilename), paste(rawDataFilename, &quot;.MD5&quot;, sep=&quot;&quot;))
+        }
+        else
+        {
+            stop(&quot;There was a problem attempting to download the file from the given URL&quot;)
+        }
+        # We either have the raw data file or it was already on disk. So here we are going to create an abbreviate data set
+        # with just the features we want. This allows us to get rid of the noisy (and memory-heavy) REMARKS column. Plus
+        # the time columns are an error-filled mess that were obviously done by manual entry and are nigh unusable.
+        dataRaw &lt;- read.csv(rawDataFilename, header=TRUE, sep=&quot;,&quot;, stringsAsFactors=FALSE, na.strings=&quot;NA&quot;)
+        dataSelection &lt;- dataRaw[, c(&quot;BGN_DATE&quot;, &quot;STATE&quot;, &quot;EVTYPE&quot;, &quot;F&quot;, &quot;FATALITIES&quot;, &quot;INJURIES&quot;, &quot;PROPDMG&quot;, &quot;PROPDMGEXP&quot;,  &quot;CROPDMG&quot;, &quot;CROPDMGEXP&quot;, &quot;WFO&quot;)]
+        saveRDS(dataSelection, cacheFilename)
+    }
+    else
+    {
+        dataSelection &lt;- readRDS(cacheFilename)
+    }
+    
+    dataSelection
+}
+originalData &lt;- acquireData()</code></pre>
+<p>In the interest of starting with a tidy data set, we can compact the property damage and crop damage columns by simply multiplying them by their proper exponent column. There are a lot of problems in the exponents column with many entries not matching the documented accepted values, so some assumptions must be made.</p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Invalid Exponent</th>
+<th align="left">Assumed Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">-</td>
+<td align="left">1000</td>
+</tr>
+<tr class="even">
+<td align="left">+</td>
+<td align="left">1000000</td>
+</tr>
+<tr class="odd">
+<td align="left">?</td>
+<td align="left">0</td>
+</tr>
+<tr class="even">
+<td align="left">h/H</td>
+<td align="left">100</td>
+</tr>
+<tr class="odd">
+<td align="left">Numeric</td>
+<td align="left">equivalent number</td>
+</tr>
+<tr class="even">
+<td align="left">empty string</td>
+<td align="left">0</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code># Create a mapping of data set value to exponent that we are going to assume it represents
+exponent &lt;- as.data.frame(c(3, 6, 0, 9, 6, 6, 0, 5, 6, 0, 4, 2, 3, 2, 7, 2, 3, 1, 8, 3))
+colnames(exponent) &lt;- c(&quot;exponent&quot;)
+rownames(exponent) &lt;- c(&quot;K&quot;, &quot;M&quot;, &quot;&quot;, &quot;B&quot;, &quot;m&quot;, &quot;+&quot;, &quot;0&quot;, &quot;5&quot;, &quot;6&quot;, &quot;?&quot;, &quot;4&quot;, &quot;2&quot;, &quot;3&quot;, &quot;h&quot;, &quot;7&quot;, &quot;H&quot;, &quot;-&quot;, &quot;1&quot;, &quot;8&quot;, &quot;k&quot;)
+originalData[originalData$PROPDMGEXP==&quot;&quot;, &quot;PROPDMGEXP&quot;] &lt;- &quot;0&quot;
+originalData[originalData$CROPDMGEXP==&quot;&quot;, &quot;CROPDMGEXP&quot;] &lt;- &quot;0&quot;
+
+# Compute the actual damage values and bind the new columns to the data frame
+originalData$realPropDamage &lt;- originalData$PROPDMG * 10^exponent[originalData$PROPDMGEXP, ]
+originalData$realCropDamage &lt;- originalData$CROPDMG * 10^exponent[originalData$CROPDMGEXP, ]
+
+# List of valid states, according to ANSI, here: https://en.wikipedia.org/wiki/List_of_U.S._state_abbreviations
+validStates &lt;- as.data.frame(c(&quot;AL&quot;, &quot;AK&quot;, &quot;AZ&quot;, &quot;AR&quot;, &quot;CA&quot;, &quot;CO&quot;, &quot;CT&quot;, &quot;DE&quot;, &quot;DC&quot;, &quot;FL&quot;, &quot;GA&quot;, &quot;HI&quot;, &quot;ID&quot;, &quot;IL&quot;, &quot;IN&quot;, &quot;IA&quot;, &quot;KS&quot;, &quot;KY&quot;, &quot;LA&quot;, &quot;ME&quot;, &quot;MD&quot;, &quot;MA&quot;, &quot;MI&quot;, &quot;MN&quot;, &quot;MS&quot;, &quot;MO&quot;, &quot;MT&quot;, &quot;NE&quot;, &quot;NV&quot;, &quot;NH&quot;, &quot;NJ&quot;, &quot;NM&quot;, &quot;NY&quot;, &quot;NC&quot;, &quot;ND&quot;, &quot;OH&quot;, &quot;OK&quot;, &quot;OR&quot;, &quot;PA&quot;, &quot;RI&quot;, &quot;SC&quot;, &quot;SD&quot;, &quot;TN&quot;, &quot;TX&quot;, &quot;UT&quot;, &quot;VT&quot;, &quot;VA&quot;, &quot;WA&quot;, &quot;WV&quot;, &quot;WI&quot;, &quot;WY&quot;, &quot;AS&quot;, &quot;GU&quot;, &quot;MP&quot;, &quot;PR&quot;, &quot;VI&quot;, &quot;UM&quot;, &quot;FM&quot;, &quot;MH&quot;, &quot;PW&quot;))
+colnames(validStates) &lt;- c(&quot;abbrev&quot;)
+validStates$fullNames &lt;- tolower(c(&quot;Alabama&quot;,&quot;Alaska&quot;,&quot;Arizona&quot;,&quot;Arkansas&quot;,&quot;California&quot;,&quot;Colorado&quot;,&quot;Connecticut&quot;,&quot;Delaware&quot;,&quot;District of Columbia&quot;,&quot;Florida&quot;,&quot;Georgia&quot;,&quot;Hawaii&quot;,&quot;Idaho&quot;,&quot;Illinois&quot;,&quot;Indiana&quot;,&quot;Iowa&quot;,&quot;Kansas&quot;,&quot;Kentucky&quot;,&quot;Louisiana&quot;,&quot;Maine&quot;,&quot;Maryland&quot;,&quot;Massachusetts&quot;,&quot;Michigan&quot;,&quot;Minnesota&quot;,&quot;Mississippi&quot;,&quot;Missouri&quot;,&quot;Montana&quot;,&quot;Nebraska&quot;,&quot;Nevada&quot;,&quot;New Hampshire&quot;,&quot;New Jersey&quot;,&quot;New Mexico&quot;,&quot;New York&quot;,&quot;North Carolina&quot;,&quot;North Dakota&quot;,&quot;Ohio&quot;,&quot;Oklahoma&quot;,&quot;Oregon&quot;,&quot;Pennsylvania&quot;,&quot;Rhode Island&quot;,&quot;South Carolina&quot;,&quot;South Dakota&quot;,&quot;Tennessee&quot;,&quot;Texas&quot;,&quot;Utah&quot;,&quot;Vermont&quot;,&quot;Virginia&quot;,&quot;Washington&quot;,&quot;West Virginia&quot;,&quot;Wisconsin&quot;,&quot;Wyoming&quot;,&quot;American Samoa&quot;,&quot;Guam&quot;,&quot;Northern Mariana Islands&quot;,&quot;Puerto Rico&quot;,&quot;Virgin Islands&quot;,&quot;U.S. Minor Outlying Islands&quot;,&quot;Federated States of Micronesia&quot;,&quot;Marshall Islands&quot;,&quot;Palau&quot;))
+
+# We need to weed out any rows with an invalid STATE. There is likely a better way to do this...
+totalCropDamageByState &lt;- aggregate(realCropDamage~STATE, data=originalData, FUN=sum)
+invalidRecordsBecauseOfState &lt;- dim(originalData[(originalData$STATE %in% setdiff(totalCropDamageByState$STATE, validStates$abbrev)), ])[1]
+percentageInvalidRecordsBecauseOfState &lt;- invalidRecordsBecauseOfState/dim(originalData)[1] * 100
+
+# Replace our current data set with one that has the bad records removed
+originalData &lt;- originalData[!(originalData$STATE %in% setdiff(totalCropDamageByState$STATE, validStates$abbrev)),]</code></pre>
+<p>Our data also has a problem with invalid states which we cannot easily work around; we computed the number of invalid rows (14757 rows) and decided that due to them being a small percentage of the overall data set (1.64%) that it was likely valid to remove them altogether.</p>
+<p>The next issue has to do with the EVTYPE field. There are many unique fields here and most of them are redundant. The strategy will be to organize these into groupings with regular expression matches with an “Other” category to capture everything that doesn’t fall within a chosen grouping. To make sure that we catch as much as possible, a new column called eventType will be added to the data frame where the EVTYPE field is upper-cased and trimmed of any leading/trailing spaces. Please note that due to limitations in R Markdown processing, the regular expressions had to be slightly modified in the table to be compliant. Simply replace the phrase &quot; or &quot; with the regex term “|” to get the valid expression (see the code for the real expressions).</p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Category</th>
+<th align="left">Expression</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Tornado</td>
+<td align="left">TORNADO or FUNNEL</td>
+</tr>
+<tr class="even">
+<td align="left">Large summer storm</td>
+<td align="left">HURRICANE or TROPICAL STORM or TYPHOON</td>
+</tr>
+<tr class="odd">
+<td align="left">Tidal / Coastal</td>
+<td align="left">TSUNAMI or SURGE or TIDE or SURF or SEAS or MARINE or RIP CURRENT or WAVE or SWELL</td>
+</tr>
+<tr class="even">
+<td align="left">Lightning</td>
+<td align="left">LIGHTNING or LIGHTING or THUNDER</td>
+</tr>
+<tr class="odd">
+<td align="left">Wind</td>
+<td align="left">WIND or MICROBURST</td>
+</tr>
+<tr class="even">
+<td align="left">Flooding</td>
+<td align="left">FLOOD or WATER or RAIN or PRECIP</td>
+</tr>
+<tr class="odd">
+<td align="left">Winter storm / Cold</td>
+<td align="left">BLIZZARD or SNOW or COLD or FREEZE or CHILL or ICE or HYPOTHERMIA or SLEET or WINTER or LOW TEMP or RECORD LOW or FROST</td>
+</tr>
+<tr class="even">
+<td align="left">Heat / Fire</td>
+<td align="left">HEAT or DROUGHT or FIRE or HIGH TEMP or RECORD HIGH or HYPERTHERMIA or HOT</td>
+</tr>
+<tr class="odd">
+<td align="left">Dust / Fog / Smoke</td>
+<td align="left">DUST or FOG or SMOKE</td>
+</tr>
+<tr class="even">
+<td align="left">Hail</td>
+<td align="left">HAIL</td>
+</tr>
+<tr class="odd">
+<td align="left">Avalanche / Mudslide</td>
+<td align="left">AVALANCHE or (?:LAND or MUD)SLIDE</td>
+</tr>
+<tr class="even">
+<td align="left">Other</td>
+<td align="left">Everything else</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code># This takes a minute to run - it has a lot of work to do (regexes are not cheap and this is running over 800K of them).
+originalData$eventType &lt;- toupper(mapply(FUN=gsub, originalData$EVTYPE, MoreArgs=list(pattern=&quot;^\\s+(.*?)\\s*$&quot;, replacement=&quot;\\1&quot;, perl=TRUE), USE.NAMES=FALSE))
+
+# This is also not going to be cheap, because it is going to run even more regexes. This is the classification function which is the heart of the analysis; there is an appendix at the end of the report if there is any curiousity as to what EVTYPEs fall into the &quot;Other&quot; category.
+classifyEventType &lt;- function(s) {
+    result &lt;- &quot;Other&quot;
+    if(grepl(&quot;TORNADO|FUNNEL&quot;, s))
+    {
+        result &lt;- &quot;Tornado&quot;
+    }
+    else if (grepl(&quot;HURRICANE|TROPICAL STORM|TYPHOON&quot;, s))
+    {
+        result &lt;- &quot;Hurricane&quot;
+    }
+    else if (grepl(&quot;TSUNAMI|SURGE|TIDE|SURF|SEAS|MARINE|RIP CURRENT|WAVE|SWELL&quot;, s))
+    {
+        result &lt;- &quot;Tidal / Coastal&quot;
+    }
+    else if (grepl(&quot;LIGHTNING|LIGHTING|THUNDER&quot;, s))
+    {
+        result &lt;- &quot;Lightning&quot;
+    }
+    else if (grepl(&quot;WIND|MICROBURST&quot;, s))
+    {
+        result &lt;- &quot;Wind / Microburst&quot;
+    }
+    else if (grepl(&quot;FLOOD|WATER|RAIN|PRECIP&quot;, s))
+    {
+        result &lt;- &quot;Flooding / Water&quot;
+    }
+    else if (grepl(&quot;BLIZZARD|SNOW|COLD|FREEZE|CHILL|ICE|HYPOTHERMIA|SLEET|WINTER|LOW TEMP|RECORD LOW|FROST&quot;, s))
+    {
+        result &lt;- &quot;Winter Storm / Cold&quot;
+    }
+    else if (grepl(&quot;HEAT|DROUGHT|FIRE|HIGH TEMP|RECORD HIGH|HYPERTHERMIA|HOT&quot;, s))
+    {
+        result &lt;- &quot;Heat / Fire&quot;
+    }
+    else if (grepl(&quot;DUST|FOG|SMOKE&quot;, s))
+    {
+        result &lt;- &quot;Dust / Fog / Smoke&quot;
+    }
+    else if (grepl(&quot;HAIL&quot;, s))
+    {
+        result &lt;- &quot;Hail&quot;
+    }
+    else if (grepl(&quot;AVALANCHE|(?:LAND|MUD)SLIDE&quot;, s))
+    {
+        result &lt;- &quot;Avalanche / Mudslide&quot;
+    }
+    result
+}
+originalData$eventClassification &lt;- mapply(FUN=classifyEventType, originalData$eventType, USE.NAMES=FALSE)
+
+# This is used for the population plot
+fatalityCount &lt;- aggregate(FATALITIES~eventClassification, data=originalData, FUN=sum)
+fatalityCount &lt;- fatalityCount[order(fatalityCount$FATALITIES, decreasing=T), ]
+injuryCount &lt;- aggregate(INJURIES~eventClassification, data=originalData, FUN=sum)
+injuryCount &lt;- injuryCount[order(injuryCount$INJURIES, decreasing=T), ]
+victimCount &lt;- merge(fatalityCount, injuryCount, by= &quot;eventClassification&quot;)
+populationHealthData &lt;- melt(victimCount, id.vars=c(&quot;eventClassification&quot;))
+victimCount$total &lt;- victimCount$FATALITIES + victimCount$INJURIES
+
+# This is used for the economic impact plot
+propertyDamageAmount &lt;- aggregate(realPropDamage~eventClassification, data=originalData, FUN=sum)
+propertyDamageAmount &lt;- propertyDamageAmount[order(propertyDamageAmount$realPropDamage, decreasing=T), ]
+cropDamageAmount &lt;- aggregate(realCropDamage~eventClassification, data=originalData, FUN=sum)
+cropDamageAmount &lt;- cropDamageAmount[order(cropDamageAmount$realCropDamage, decreasing=T), ]
+totalDamageAmount &lt;- merge(propertyDamageAmount, cropDamageAmount, by= &quot;eventClassification&quot;)
+economicHealthData &lt;-melt(totalDamageAmount, id.vars=c(&quot;eventClassification&quot;))
+totalDamageAmount$total &lt;- totalDamageAmount$realCropDamage + totalDamageAmount$realPropDamage
+
+# These are for our post-analysis chloropleths
+
+# Water damage
+waterDamageByState &lt;- by(originalData, originalData$STATE, function(x) sum(x[x$eventClassification==&quot;Flooding / Water&quot;, &quot;realCropDamage&quot;] + x[x$eventClassification==&quot;Flooding / Water&quot;, &quot;realPropDamage&quot;]))
+
+# We need a data frame to really do anything of use with &quot;by&quot; results
+dfWaterDamageByState &lt;- as.data.frame(names(waterDamageByState))
+colnames(dfWaterDamageByState) &lt;- c(&quot;state&quot;)
+dfWaterDamageByState$cost &lt;- as.vector(waterDamageByState[names(waterDamageByState)])
+dfWaterDamageByState &lt;- merge(dfWaterDamageByState, validStates, by.x=&quot;state&quot;, by.y=&quot;abbrev&quot;)
+colnames(dfWaterDamageByState) &lt;- c(&quot;state&quot;, &quot;cost&quot;, &quot;stateName&quot;)
+
+# Tornado victims
+tornadoVictimsByState &lt;- by(originalData, originalData$STATE, function(x) sum(x[x$eventClassification==&quot;Tornado&quot;, &quot;FATALITIES&quot;] + x[x$eventClassification==&quot;Tornado&quot;, &quot;INJURIES&quot;]))
+
+# We need a data frame to really do anything of use with &quot;by&quot; results
+dfTornadoVictimsByState &lt;- as.data.frame(names(tornadoVictimsByState))
+colnames(dfTornadoVictimsByState) &lt;- c(&quot;state&quot;)
+dfTornadoVictimsByState$victims &lt;- as.vector(tornadoVictimsByState[names(tornadoVictimsByState)])
+dfTornadoVictimsByState &lt;- merge(dfTornadoVictimsByState, validStates, by.x=&quot;state&quot;, by.y=&quot;abbrev&quot;)
+colnames(dfTornadoVictimsByState) &lt;- c(&quot;state&quot;, &quot;victims&quot;, &quot;stateName&quot;)</code></pre>
+</div>
+<div id="results" class="section level2">
+<h2>Results</h2>
+<p>To answer the questions posed in the Synopsis section, we have constructed three plots.</p>
+<p><strong>1. Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?</strong></p>
+<p>After classifying the various types of events and performing some aggregations based thereon, it was very apparent that <strong>tornado activity</strong> was overwhelmingly responsible for causing the most harm to humans - to the point that a bar chart is uninteresting and not presented here (although the code to reproduce it is relevant):</p>
+<pre class="r"><code># Stacked bar plot fatality/injury
+g &lt;- ggplot(populationHealthData, aes(eventClassification, value/1000, order=desc(variable)))
+g &lt;- g + geom_bar(stat=&quot;identity&quot;, aes(fill=variable), colour=&quot;black&quot;) +
+    labs(x = &quot;Event Type&quot;, y = &quot;Victims (Thousands)&quot;, fill=&quot;Incident Type&quot;, title=&quot;US Total Victims Per Weather Phenomenon 1950 - 2011&quot;) +
+    scale_fill_discrete(labels=c(&quot;Fatalities&quot;, &quot;Injuries&quot;)) +
+    theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1), 
+          legend.background = element_rect(fill = &quot;#FFFAF0&quot;, colour = &quot;#000000&quot;), 
+          legend.position = c(1,1), legend.justification = c( 1,1),
+          panel.background = element_rect(fill = &quot;#FFFAF0&quot;, colour = &quot;#000000&quot;), 
+          panel.background = element_rect(fill = &quot;#FFFAF0&quot;, colour = &quot;#000000&quot;), 
+          plot.background = element_rect(fill = &quot;#FFFAF0&quot;, colour = &quot;#000000&quot;), 
+          panel.grid.major = element_line(colour=&quot;#FFDEAD&quot;))
+#g</code></pre>
+<pre class="r"><code>victimCount[order(victimCount$total, decreasing=T), ]</code></pre>
+<pre><code>##     eventClassification FATALITIES INJURIES total
+## 10              Tornado       5661    91410 97071
+## 5           Heat / Fire       3048    10442 13490
+## 3      Flooding / Water       1646     8963 10609
+## 11    Wind / Microburst       1183     9036 10219
+## 7             Lightning       1019     7685  8704
+## 12  Winter Storm / Cold        862     6236  7098
+## 9       Tidal / Coastal       1054     1400  2454
+## 6             Hurricane        201     1716  1917
+## 2    Dust / Fog / Smoke        104     1559  1663
+## 4                  Hail         15     1371  1386
+## 1  Avalanche / Mudslide        268      225   493
+## 8                 Other         50      427   477</code></pre>
+<p>The per-state breakdown for tornado harm is interesting but unsurprising, as tornado activity in the United States happens in a rather well-defined area. A chloropleth of the victim count shows Texas as the most victimized by injury/fatality:</p>
+<pre class="r"><code>states_map &lt;- map_data(&quot;state&quot;) 
+pal &lt;- colorRampPalette(c(&quot;#00FF00&quot;, &quot;#FF0000&quot;))(5)
+
+g &lt;- ggplot(dfTornadoVictimsByState, aes(map_id=stateName, fill=victims))
+g &lt;- g + geom_map(map=states_map, colour =&quot;black&quot;) + 
+    scale_fill_gradient2(low=pal[1], mid=pal[3], high=pal[5], midpoint=median(dfTornadoVictimsByState$victims)) +
+    labs(x = &quot;Longitude (deg)&quot;, y = &quot;Latitude (Deg)&quot;, fill=&quot;Victims&quot;, title=&quot;US Per-State Victims Due To Tornado-Related Weather Affects 1950-2011&quot;) +
+    expand_limits(x = states_map$long, y = states_map$lat) +
+    coord_map(&quot;polyconic&quot;)
+g</code></pre>
+<p><img src="NOAA_files/figure-html/Tornado%20Victim%20Count-1.png" /></p>
+<pre class="r"><code>head(dfTornadoVictimsByState[order(dfTornadoVictimsByState$victims, decreasing=T), c(&quot;stateName&quot;, &quot;state&quot;, &quot;victims&quot;)], 10)</code></pre>
+<pre><code>##      stateName state victims
+## 48       texas    TX    8745
+## 2      alabama    AL    8546
+## 29 mississippi    MS    6696
+## 3     arkansas    AR    5495
+## 40    oklahoma    OK    5125
+## 47   tennessee    TN    5116
+## 28    missouri    MO    4718
+## 39        ohio    OH    4633
+## 18     indiana    IN    4476
+## 17    illinois    IL    4348</code></pre>
+<p><strong>2. Across the United States, which types of events have the greatest economic consequences?</strong></p>
+<p>Economic consequences were a bit more evenly spread out than the population harm results, although <strong>flooding and water-related damages</strong> seemed to clearly be the worst for property damage and <strong>heat-related weather conditions</strong> were very bad in terms of crop damage:</p>
+<pre class="r"><code># Stacked bar plot prop/crop damage
+g &lt;- ggplot(economicHealthData, aes(eventClassification, value/1000000000))
+g &lt;- g + geom_bar(stat=&quot;identity&quot;, aes(fill=variable), colour=&quot;black&quot;) +
+    guides(fill = guide_legend(reverse = TRUE)) +
+    labs(x = &quot;Event Type&quot;, y = &quot;Cost (USD Billions, non-adjusted)&quot;, fill=&quot;Damage Type&quot;, title=&quot;US Total Cost Per Weather Phenomenon 1950 - 2011&quot;) +
+    scale_fill_discrete(labels=c(&quot;Property&quot;, &quot;Crop&quot;)) +
+    theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1), 
+          legend.background = element_rect(fill = &quot;#FFFAF0&quot;, colour = &quot;#000000&quot;), 
+          legend.position = c(1,1), legend.justification = c( 1,1),
+          panel.background = element_rect(fill = &quot;#FFFAF0&quot;, colour = &quot;#000000&quot;), 
+          panel.background = element_rect(fill = &quot;#FFFAF0&quot;, colour = &quot;#000000&quot;), 
+          plot.background = element_rect(fill = &quot;#FFFAF0&quot;, colour = &quot;#000000&quot;), 
+          panel.grid.major = element_line(colour=&quot;#FFDEAD&quot;))
+g</code></pre>
+<p><img src="NOAA_files/figure-html/Economic%20Impact%20Graph-1.png" /></p>
+<pre class="r"><code>totalDamageAmount[order(totalDamageAmount$total, decreasing=T), ]</code></pre>
+<pre><code>##     eventClassification realPropDamage realCropDamage   total
+## 3      Flooding / Water        1.7e+11        1.3e+10 1.8e+11
+## 6             Hurricane        9.3e+10        6.2e+09 9.9e+10
+## 10              Tornado        5.9e+10        4.2e+08 5.9e+10
+## 9       Tidal / Coastal        4.8e+10        4.8e+07 4.8e+10
+## 5           Heat / Fire        9.6e+09        1.5e+10 2.5e+10
+## 12  Winter Storm / Cold        1.2e+10        8.7e+09 2.1e+10
+## 4                  Hail        1.6e+10        3.0e+09 1.9e+10
+## 11    Wind / Microburst        1.1e+10        1.5e+09 1.2e+10
+## 7             Lightning        7.6e+09        6.7e+08 8.2e+09
+## 1  Avalanche / Mudslide        3.3e+08        2.0e+07 3.5e+08
+## 8                 Other        6.8e+07        1.6e+08 2.2e+08
+## 2    Dust / Fog / Smoke        3.1e+07        3.1e+06 3.4e+07</code></pre>
+<p>A per-state breakdown of the economic impact of these weather events seems to place California overwhelmingly in the lead in terms of damage. This is likely due to being a coastal area with many expensive properties. California is also responsible for a large amount of food production for the entire United States, leading to an unbalanced amount of damage per square mile.</p>
+<pre class="r"><code>states_map &lt;- map_data(&quot;state&quot;) 
+pal &lt;- colorRampPalette(c(&quot;#00FF00&quot;, &quot;#FF0000&quot;))(5)
+
+g &lt;- ggplot(dfWaterDamageByState, aes(map_id=stateName, fill=log(cost)))
+g &lt;- g + geom_map(map=states_map, colour =&quot;black&quot;) + 
+    scale_fill_gradient2(low=pal[1], mid=pal[3], high=pal[5], midpoint=median(log(dfWaterDamageByState$cost))) +
+    labs(x = &quot;Longitude (deg)&quot;, y = &quot;Latitude (Deg)&quot;, fill=&quot;Log-Cost&quot;, title=&quot;US Per-State Cost Due To Water-Related Weather Affects 1950-2011&quot;) +
+    expand_limits(x = states_map$long, y = states_map$lat) +
+    coord_map(&quot;polyconic&quot;)
+g</code></pre>
+<p><img src="NOAA_files/figure-html/Economic%20Impact%20Chloropleth-1.png" /></p>
+<pre class="r"><code>head(dfWaterDamageByState[order(dfWaterDamageByState$cost, decreasing=T), c(&quot;stateName&quot;, &quot;state&quot;, &quot;cost&quot;)], 10)</code></pre>
+<pre><code>##       stateName state    cost
+## 6    california    CA 1.2e+11
+## 17     illinois    IL 1.1e+10
+## 47    tennessee    TN 4.8e+09
+## 32 north dakota    ND 4.2e+09
+## 15         iowa    IA 3.4e+09
+## 21    louisiana    LA 3.3e+09
+## 38     new york    NY 3.2e+09
+## 35   new jersey    NJ 2.9e+09
+## 42 pennsylvania    PA 2.5e+09
+## 11      florida    FL 2.5e+09</code></pre>
+</div>
+<div id="about-the-analysis" class="section level2">
+<h2>About the Analysis</h2>
+<div id="metadata" class="section level3">
+<h3>Metadata</h3>
+<table>
+<thead>
+<tr class="header">
+<th align="left">File Characteristic</th>
+<th align="left">Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">File Name</td>
+<td align="left">repdata_data_StormData.csv.bz2</td>
+</tr>
+<tr class="even">
+<td align="left">URL</td>
+<td align="left"><a href="https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"><a href="https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2">https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2</a></a></td>
+</tr>
+<tr class="odd">
+<td align="left">File Size</td>
+<td align="left">49,177,144 bytes</td>
+</tr>
+<tr class="even">
+<td align="left">Compression</td>
+<td align="left">bz2</td>
+</tr>
+<tr class="odd">
+<td align="left">MD5</td>
+<td align="left">df4aa61fff89427db6b7f7b1113b5553</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="environment" class="section level3">
+<h3>Environment</h3>
+<p><strong>System Information</strong></p>
+<pre class="r"><code>sysinf &lt;- Sys.info()</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Parameter</th>
+<th align="left">Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Operating System</td>
+<td align="left">Windows7 x64</td>
+</tr>
+<tr class="even">
+<td align="left">version</td>
+<td align="left">build 7601, Service Pack 1</td>
+</tr>
+<tr class="odd">
+<td align="left">machine arch</td>
+<td align="left">x86-64</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Session Information</strong></p>
+<pre class="r"><code>sessionInfo()</code></pre>
+<pre><code>## R version 3.1.0 (2014-04-10)
+## Platform: x86_64-w64-mingw32/x64 (64-bit)
+## 
+## locale:
+## [1] LC_COLLATE=English_Canada.1252  LC_CTYPE=English_Canada.1252   
+## [3] LC_MONETARY=English_Canada.1252 LC_NUMERIC=C                   
+## [5] LC_TIME=English_Canada.1252    
+## 
+## attached base packages:
+## [1] tools     stats     graphics  grDevices utils     datasets  methods  
+## [8] base     
+## 
+## other attached packages:
+## [1] mapproj_1.2-4   maps_2.3-11     plyr_1.8.3      reshape2_1.4.1 
+## [5] lubridate_1.3.3 ggplot2_1.0.1  
+## 
+## loaded via a namespace (and not attached):
+##  [1] colorspace_1.2-6 digest_0.6.8     evaluate_0.7     formatR_1.2     
+##  [5] grid_3.1.0       gtable_0.1.2     htmltools_0.2.6  knitr_1.10.5    
+##  [9] labeling_0.3     magrittr_1.5     MASS_7.3-42      memoise_0.2.1   
+## [13] munsell_0.4.2    proto_0.3-10     Rcpp_0.11.6      rmarkdown_0.7   
+## [17] scales_0.2.5     stringi_0.5-5    stringr_1.0.0    yaml_2.1.13</code></pre>
+</div>
+</div>
+<div id="references" class="section level2">
+<h2>References</h2>
+<ul>
+<li><a href="https://en.wikipedia.org/wiki/List_of_U.S._state_abbreviations">Wiki for United States state abbreviations</a></li>
+<li><a href="http://shop.oreilly.com/product/0636920023135.do">R Graphics Cookbook</a> - Winston Chang</li>
+</ul>
+<div id="what-is-other" class="section level3">
+<h3>What is “Other”?</h3>
+<p>This is just a quickie function to list all of the classifications that fall into the “Other” category. There are many of them, but most are summary data and mis-spellings of terms that would have been caught by the classification algorithm if they were correct. Some are rare enough or non-specific enough to deserve the “Other” classification.</p>
+<pre class="r"><code>whatIsOther &lt;- function(eventTypeData) {
+other &lt;- as.data.frame(unique(eventTypeData), stringsAsFactors=FALSE)
+colnames(other) &lt;- c(&quot;type&quot;)
+other$classification &lt;- mapply(FUN=classifyEventType, unique(eventTypeData), USE.NAMES=FALSE)
+other &lt;- other[other$classification == &quot;Other&quot;, &quot;type&quot;]
+other
+}
+whatIsOther(originalData$eventType)</code></pre>
+<pre><code>##   [1] &quot;WALL CLOUD&quot;                    &quot;SEVERE TURBULENCE&quot;            
+##   [3] &quot;RECORD WARMTH&quot;                 &quot;APACHE COUNTY&quot;                
+##   [5] &quot;URBAN/SMALL&quot;                   &quot;HIGH&quot;                         
+##   [7] &quot;URBAN AND SMALL&quot;               &quot;DOWNBURST&quot;                    
+##   [9] &quot;GUSTNADO AND&quot;                  &quot;FREEZING DRIZZLE&quot;             
+##  [11] &quot;GLAZE&quot;                         &quot;WINTRY MIX&quot;                   
+##  [13] &quot;DRY&quot;                           &quot;WAYTERSPOUT&quot;                  
+##  [15] &quot;URBAN AND SMALL STREAM&quot;        &quot;MUD SLIDE&quot;                    
+##  [17] &quot;LIGNTNING&quot;                     &quot;COOL AND WET&quot;                 
+##  [19] &quot;SMALL STREAM AND&quot;              &quot;MUD SLIDES&quot;                   
+##  [21] &quot;EXCESSIVE WETNESS&quot;             &quot;ROTATING WALL CLOUD&quot;          
+##  [23] &quot;LARGE WALL CLOUD&quot;              &quot;GUSTNADO&quot;                     
+##  [25] &quot;WARM DRY CONDITIONS&quot;           &quot;URBAN/SMALL STREAM&quot;           
+##  [27] &quot;TORNDAO&quot;                       &quot;AVALANCE&quot;                     
+##  [29] &quot;RECORD TEMPERATURES&quot;           &quot;OTHER&quot;                        
+##  [31] &quot;ICY ROADS&quot;                     &quot;HEAVY MIX&quot;                    
+##  [33] &quot;DAM FAILURE&quot;                   &quot;SOUTHEAST&quot;                    
+##  [35] &quot;FREEZING DRIZZLE AND FREEZING&quot; &quot;WET WEATHER&quot;                  
+##  [37] &quot;BEACH EROSIN&quot;                  &quot;MUD/ROCK SLIDE&quot;               
+##  [39] &quot;FLASH FLOOODING&quot;               &quot;TSTMW&quot;                        
+##  [41] &quot;EXCESSIVE&quot;                     &quot;?&quot;                            
+##  [43] &quot;DRY PATTERN&quot;                   &quot;MILD/DRY PATTERN&quot;             
+##  [45] &quot;MILD PATTERN&quot;                  &quot;HEAVY SHOWERS&quot;                
+##  [47] &quot;HEAVY SHOWER&quot;                  &quot;URBAN SMALL&quot;                  
+##  [49] &quot;SMALL STREAM&quot;                  &quot;URBAN/SML STREAM FLD&quot;         
+##  [51] &quot;RECORD DRY MONTH&quot;              &quot;TEMPERATURE RECORD&quot;           
+##  [53] &quot;COASTAL STORM&quot;                 &quot;WET MONTH&quot;                    
+##  [55] &quot;WET YEAR&quot;                      &quot;BEACH EROSION&quot;                
+##  [57] &quot;LANDSLUMP&quot;                     &quot;RECORD WARM TEMPS.&quot;           
+##  [59] &quot;RECORD TEMPERATURE&quot;            &quot;FREEZING SPRAY&quot;               
+##  [61] &quot;SUMMARY JAN 17&quot;                &quot;SUMMARY OF MARCH 14&quot;          
+##  [63] &quot;SUMMARY OF MARCH 23&quot;           &quot;SUMMARY OF MARCH 24&quot;          
+##  [65] &quot;SUMMARY OF APRIL 3RD&quot;          &quot;SUMMARY OF APRIL 12&quot;          
+##  [67] &quot;SUMMARY OF APRIL 13&quot;           &quot;SUMMARY OF APRIL 21&quot;          
+##  [69] &quot;SUMMARY AUGUST 11&quot;             &quot;SUMMARY OF APRIL 27&quot;          
+##  [71] &quot;SUMMARY OF MAY 9-10&quot;           &quot;SUMMARY OF MAY 10&quot;            
+##  [73] &quot;SUMMARY OF MAY 13&quot;             &quot;SUMMARY OF MAY 14&quot;            
+##  [75] &quot;SUMMARY OF MAY 22 AM&quot;          &quot;SUMMARY OF MAY 22 PM&quot;         
+##  [77] &quot;SUMMARY OF MAY 26 AM&quot;          &quot;SUMMARY OF MAY 26 PM&quot;         
+##  [79] &quot;METRO STORM, MAY 26&quot;           &quot;SUMMARY OF MAY 31 AM&quot;         
+##  [81] &quot;SUMMARY OF MAY 31 PM&quot;          &quot;SUMMARY OF JUNE 3&quot;            
+##  [83] &quot;SUMMARY OF JUNE 4&quot;             &quot;SUMMARY JUNE 5-6&quot;             
+##  [85] &quot;SUMMARY JUNE 6&quot;                &quot;SUMMARY OF JUNE 11&quot;           
+##  [87] &quot;SUMMARY OF JUNE 12&quot;            &quot;SUMMARY OF JUNE 13&quot;           
+##  [89] &quot;SUMMARY OF JUNE 15&quot;            &quot;SUMMARY OF JUNE 16&quot;           
+##  [91] &quot;SUMMARY JUNE 18-19&quot;            &quot;SUMMARY OF JUNE 23&quot;           
+##  [93] &quot;SUMMARY OF JUNE 24&quot;            &quot;SUMMARY OF JUNE 30&quot;           
+##  [95] &quot;SUMMARY OF JULY 2&quot;             &quot;SUMMARY OF JULY 3&quot;            
+##  [97] &quot;SUMMARY OF JULY 11&quot;            &quot;SUMMARY OF JULY 22&quot;           
+##  [99] &quot;SUMMARY JULY 23-24&quot;            &quot;SUMMARY OF JULY 26&quot;           
+## [101] &quot;SUMMARY OF JULY 29&quot;            &quot;SUMMARY OF AUGUST 1&quot;          
+## [103] &quot;SUMMARY AUGUST 2-3&quot;            &quot;SUMMARY AUGUST 7&quot;             
+## [105] &quot;SUMMARY AUGUST 9&quot;              &quot;SUMMARY AUGUST 10&quot;            
+## [107] &quot;SUMMARY AUGUST 17&quot;             &quot;SUMMARY AUGUST 21&quot;            
+## [109] &quot;SUMMARY AUGUST 28&quot;             &quot;SUMMARY SEPTEMBER 4&quot;          
+## [111] &quot;SUMMARY SEPTEMBER 20&quot;          &quot;SUMMARY SEPTEMBER 23&quot;         
+## [113] &quot;SUMMARY SEPT. 25-26&quot;           &quot;SUMMARY: OCT. 20-21&quot;          
+## [115] &quot;SUMMARY: OCTOBER 31&quot;           &quot;SUMMARY: NOV. 6-7&quot;            
+## [117] &quot;SUMMARY: NOV. 16&quot;              &quot;WET MICOBURST&quot;                
+## [119] &quot;NO SEVERE WEATHER&quot;             &quot;SUMMARY OF MAY 22&quot;            
+## [121] &quot;SUMMARY OF JUNE 6&quot;             &quot;SUMMARY AUGUST 4&quot;             
+## [123] &quot;SUMMARY OF JUNE 10&quot;            &quot;SUMMARY OF JUNE 18&quot;           
+## [125] &quot;SUMMARY SEPTEMBER 3&quot;           &quot;SUMMARY: SEPT. 18&quot;            
+## [127] &quot;SML STREAM FLD&quot;                &quot;VOLCANIC ASH&quot;                 
+## [129] &quot;VOLCANIC ASH PLUME&quot;            &quot;NONE&quot;                         
+## [131] &quot;DAM BREAK&quot;                     &quot;TSTM WND&quot;                     
+## [133] &quot;URBAN/SML STREAM FLDG&quot;         &quot;COASTALSTORM&quot;                 
+## [135] &quot;SUMMARY OF MARCH 24-25&quot;        &quot;SUMMARY OF MARCH 27&quot;          
+## [137] &quot;SUMMARY OF MARCH 29&quot;           &quot;URBAN/SMALL STRM FLDG&quot;        
+## [139] &quot;MILD AND DRY PATTERN&quot;          &quot;DRY SPELL&quot;                    
+## [141] &quot;DRY WEATHER&quot;                   &quot;ABNORMAL WARMTH&quot;              
+## [143] &quot;UNUSUAL WARMTH&quot;                &quot;COASTAL EROSION&quot;              
+## [145] &quot;UNUSUAL/RECORD WARMTH&quot;         &quot;SEICHE&quot;                       
+## [147] &quot;TSTM&quot;                          &quot;ROCK SLIDE&quot;                   
+## [149] &quot;RECORD COOL&quot;                   &quot;RECORD WARM&quot;                  
+## [151] &quot;TROPICAL DEPRESSION&quot;           &quot;VOLCANIC ERUPTION&quot;            
+## [153] &quot;COOL SPELL&quot;                    &quot;EXCESSIVELY DRY&quot;              
+## [155] &quot;VOG&quot;                           &quot;MONTHLY TEMPERATURE&quot;          
+## [157] &quot;RECORD DRYNESS&quot;                &quot;DRY CONDITIONS&quot;               
+## [159] &quot;REMNANTS OF FLOYD&quot;             &quot;LANDSPOUT&quot;                    
+## [161] &quot;DRIEST MONTH&quot;                  &quot;DRYNESS&quot;                      
+## [163] &quot;UNUSUALLY WARM&quot;                &quot;WARM WEATHER&quot;                 
+## [165] &quot;ABNORMALLY DRY&quot;                &quot;RED FLAG CRITERIA&quot;            
+## [167] &quot;WND&quot;                           &quot;EXTREMELY WET&quot;                
+## [169] &quot;VERY DRY&quot;                      &quot;PROLONG WARMTH&quot;               
+## [171] &quot;NORTHERN LIGHTS&quot;               &quot;VERY WARM&quot;                    
+## [173] &quot;ABNORMALLY WET&quot;                &quot;DROWNING&quot;                     
+## [175] &quot;VOLCANIC ASHFALL&quot;</code></pre>
+</div>
+</div>
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+$(document).ready(function () {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+});
+
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
