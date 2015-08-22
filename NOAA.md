@@ -1,4 +1,4 @@
-# NOAA Weather Data Analysis 1950-2001
+# NOAA Weather Data Analysis 1950-2011
 SDMitchell  
 August 15, 2015  
 
@@ -303,7 +303,7 @@ g <- g + geom_map(map=states_map, colour ="black") +
 g
 ```
 
-![](NOAA_files/figure-html/Tornado Victim Count-1.png) 
+<img src="NOAA_files/figure-html/Tornado Victim Count-1.png" title="" alt="" style="display: block; margin: auto;" />
   
 
 ```r
@@ -346,7 +346,7 @@ g <- g + geom_bar(stat="identity", aes(fill=variable), colour="black") +
 g
 ```
 
-![](NOAA_files/figure-html/Economic Impact Graph-1.png) 
+<img src="NOAA_files/figure-html/Economic Impact Graph-1.png" title="" alt="" style="display: block; margin: auto;" />
   
 
 ```r
@@ -390,7 +390,7 @@ g <- g + geom_map(map=states_map, colour ="black") +
 g
 ```
 
-![](NOAA_files/figure-html/Economic Impact choropleth-1.png) 
+<img src="NOAA_files/figure-html/Economic Impact choropleth-1.png" title="" alt="" style="display: block; margin: auto;" />
   
 
 ```r

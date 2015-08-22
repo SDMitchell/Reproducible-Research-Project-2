@@ -1,11 +1,10 @@
 ---
-title: "NOAA Weather Data Analysis 1950-2001"
+title: "NOAA Weather Data Analysis 1950-2011"
 author: "SDMitchell"
 date: "August 15, 2015"
-output: 
+output:
   html_document:
     keep_md: true
-    self_contained: no
 ---
 
 ## Synopsis
@@ -267,7 +266,7 @@ victimCount[order(victimCount$total, decreasing=T), ]
   
 The per-state breakdown for tornado harm is interesting but unsurprising, as tornado activity in the United States happens in a rather well-defined area. A choropleth of the victim count shows Texas as the most victimized by injury/fatality:
   
-```{r Tornado Victim Count, fig.width=12}
+```{r Tornado Victim Count, fig.width=12, fig.align='center'}
 states_map <- map_data("state") 
 pal <- colorRampPalette(c("#00FF00", "#FF0000"))(5)
 
@@ -293,7 +292,7 @@ head(dfTornadoVictimsByState[order(dfTornadoVictimsByState$victims, decreasing=T
   
 Economic consequences were a bit more evenly spread out than the population harm results, although **flooding and water-related damages** seemed to clearly be the worst for property damage and **heat-related weather conditions** were very bad in terms of crop damage:
   
-```{r Economic Impact Graph, fig.width=12}
+```{r Economic Impact Graph, fig.width=12, fig.align='center'}
 # Stacked bar plot prop/crop damage
 g <- ggplot(economicHealthData, aes(eventClassification, value/1000000000))
 g <- g + geom_bar(stat="identity", aes(fill=variable), colour="black") +
@@ -316,7 +315,7 @@ totalDamageAmount[order(totalDamageAmount$total, decreasing=T), ]
   
 A per-state breakdown of the economic impact of these weather events seems to place California overwhelmingly in the lead in terms of damage. This is likely due to being a coastal area with many expensive properties. California is also responsible for a large amount of food production for the entire United States, leading to an unbalanced amount of damage per square mile.
 
-```{r Economic Impact choropleth, fig.width=12}
+```{r Economic Impact choropleth, fig.width=12, fig.align='center'}
 states_map <- map_data("state") 
 pal <- colorRampPalette(c("#00FF00", "#FF0000"))(5)
 
