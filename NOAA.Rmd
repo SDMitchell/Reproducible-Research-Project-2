@@ -21,6 +21,8 @@ Points of note
 * The code for fetching, extracting and caching relevant portions of the data is all included as part of the analysis;
 * It is important to note that all dollar amounts are in US dollars and are *NOT* adjusted for inflation.
   
+*** 
+  
 ## Data Processing
 The following libraries are needed for this analysis and it is assumed that they are already installed (via install.packages) if any reproduction is being attempted:
 ```{r Libraries, warning=FALSE, error=FALSE, message=FALSE}
@@ -211,7 +213,7 @@ totalDamageAmount <- merge(propertyDamageAmount, cropDamageAmount, by= "eventCla
 economicHealthData <-melt(totalDamageAmount, id.vars=c("eventClassification"))
 totalDamageAmount$total <- totalDamageAmount$realCropDamage + totalDamageAmount$realPropDamage
 
-# These are for our post-analysis chloropleths
+# These are for our post-analysis choropleths
 
 # Water damage
 waterDamageByState <- by(originalData, originalData$STATE, function(x) sum(x[x$eventClassification=="Flooding / Water", "realCropDamage"] + x[x$eventClassification=="Flooding / Water", "realPropDamage"]))
@@ -233,6 +235,8 @@ dfTornadoVictimsByState$victims <- as.vector(tornadoVictimsByState[names(tornado
 dfTornadoVictimsByState <- merge(dfTornadoVictimsByState, validStates, by.x="state", by.y="abbrev")
 colnames(dfTornadoVictimsByState) <- c("state", "victims", "stateName")
 ```
+  
+*** 
   
 ## Results
 To answer the questions posed in the Synopsis section, we have constructed three plots. 
@@ -261,7 +265,7 @@ g <- g + geom_bar(stat="identity", aes(fill=variable), colour="black") +
 victimCount[order(victimCount$total, decreasing=T), ]
 ```
   
-The per-state breakdown for tornado harm is interesting but unsurprising, as tornado activity in the United States happens in a rather well-defined area. A chloropleth of the victim count shows Texas as the most victimized by injury/fatality:
+The per-state breakdown for tornado harm is interesting but unsurprising, as tornado activity in the United States happens in a rather well-defined area. A choropleth of the victim count shows Texas as the most victimized by injury/fatality:
   
 ```{r Tornado Victim Count, fig.width=12}
 states_map <- map_data("state") 
@@ -312,7 +316,7 @@ totalDamageAmount[order(totalDamageAmount$total, decreasing=T), ]
   
 A per-state breakdown of the economic impact of these weather events seems to place California overwhelmingly in the lead in terms of damage. This is likely due to being a coastal area with many expensive properties. California is also responsible for a large amount of food production for the entire United States, leading to an unbalanced amount of damage per square mile.
 
-```{r Economic Impact Chloropleth, fig.width=12}
+```{r Economic Impact choropleth, fig.width=12}
 states_map <- map_data("state") 
 pal <- colorRampPalette(c("#00FF00", "#FF0000"))(5)
 
@@ -333,6 +337,8 @@ g
 ```{r Top-10 Economic Impact}
 head(dfWaterDamageByState[order(dfWaterDamageByState$cost, decreasing=T), c("stateName", "state", "cost")], 10)
 ```
+  
+*** 
   
 ## About the Analysis
   
@@ -364,6 +370,8 @@ sessionInfo()
 ## References
 * [Wiki for United States state abbreviations](https://en.wikipedia.org/wiki/List_of_U.S._state_abbreviations)
 * [R Graphics Cookbook](http://shop.oreilly.com/product/0636920023135.do) - Winston Chang
+  
+*** 
   
 ### What is "Other"?
 This is just a quickie function to list all of the classifications that fall into the "Other" category. There are many of them, but most are summary data and mis-spellings of terms that would have been caught by the classification algorithm if they were correct. Some are rare enough or non-specific enough to deserve the "Other" classification.

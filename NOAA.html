@@ -83,6 +83,7 @@ img {
 <li>The code for fetching, extracting and caching relevant portions of the data is all included as part of the analysis;</li>
 <li>It is important to note that all dollar amounts are in US dollars and are <em>NOT</em> adjusted for inflation.</li>
 </ul>
+<hr />
 </div>
 <div id="data-processing" class="section level2">
 <h2>Data Processing</h2>
@@ -325,7 +326,7 @@ totalDamageAmount &lt;- merge(propertyDamageAmount, cropDamageAmount, by= &quot;
 economicHealthData &lt;-melt(totalDamageAmount, id.vars=c(&quot;eventClassification&quot;))
 totalDamageAmount$total &lt;- totalDamageAmount$realCropDamage + totalDamageAmount$realPropDamage
 
-# These are for our post-analysis chloropleths
+# These are for our post-analysis choropleths
 
 # Water damage
 waterDamageByState &lt;- by(originalData, originalData$STATE, function(x) sum(x[x$eventClassification==&quot;Flooding / Water&quot;, &quot;realCropDamage&quot;] + x[x$eventClassification==&quot;Flooding / Water&quot;, &quot;realPropDamage&quot;]))
@@ -346,6 +347,7 @@ colnames(dfTornadoVictimsByState) &lt;- c(&quot;state&quot;)
 dfTornadoVictimsByState$victims &lt;- as.vector(tornadoVictimsByState[names(tornadoVictimsByState)])
 dfTornadoVictimsByState &lt;- merge(dfTornadoVictimsByState, validStates, by.x=&quot;state&quot;, by.y=&quot;abbrev&quot;)
 colnames(dfTornadoVictimsByState) &lt;- c(&quot;state&quot;, &quot;victims&quot;, &quot;stateName&quot;)</code></pre>
+<hr />
 </div>
 <div id="results" class="section level2">
 <h2>Results</h2>
@@ -379,7 +381,7 @@ g &lt;- g + geom_bar(stat=&quot;identity&quot;, aes(fill=variable), colour=&quot
 ## 4                  Hail         15     1371  1386
 ## 1  Avalanche / Mudslide        268      225   493
 ## 8                 Other         50      427   477</code></pre>
-<p>The per-state breakdown for tornado harm is interesting but unsurprising, as tornado activity in the United States happens in a rather well-defined area. A chloropleth of the victim count shows Texas as the most victimized by injury/fatality:</p>
+<p>The per-state breakdown for tornado harm is interesting but unsurprising, as tornado activity in the United States happens in a rather well-defined area. A choropleth of the victim count shows Texas as the most victimized by injury/fatality:</p>
 <pre class="r"><code>states_map &lt;- map_data(&quot;state&quot;) 
 pal &lt;- colorRampPalette(c(&quot;#00FF00&quot;, &quot;#FF0000&quot;))(5)
 
@@ -455,7 +457,7 @@ g &lt;- g + geom_map(map=states_map, colour =&quot;black&quot;) +
           plot.background = element_rect(fill = &quot;#FFFAF0&quot;, colour = &quot;#000000&quot;), 
           panel.grid.major = element_line(colour=&quot;#FFDEAD&quot;))
 g</code></pre>
-<p><img src="NOAA_files/figure-html/Economic%20Impact%20Chloropleth-1.png" /></p>
+<p><img src="NOAA_files/figure-html/Economic%20Impact%20choropleth-1.png" /></p>
 <pre class="r"><code>head(dfWaterDamageByState[order(dfWaterDamageByState$cost, decreasing=T), c(&quot;stateName&quot;, &quot;state&quot;, &quot;cost&quot;)], 10)</code></pre>
 <pre><code>##       stateName state    cost
 ## 6    california    CA 1.2e+11
@@ -468,6 +470,7 @@ g</code></pre>
 ## 35   new jersey    NJ 2.9e+09
 ## 42 pennsylvania    PA 2.5e+09
 ## 11      florida    FL 2.5e+09</code></pre>
+<hr />
 </div>
 <div id="about-the-analysis" class="section level2">
 <h2>About the Analysis</h2>
@@ -562,6 +565,7 @@ g</code></pre>
 <li><a href="https://en.wikipedia.org/wiki/List_of_U.S._state_abbreviations">Wiki for United States state abbreviations</a></li>
 <li><a href="http://shop.oreilly.com/product/0636920023135.do">R Graphics Cookbook</a> - Winston Chang</li>
 </ul>
+<hr />
 <div id="what-is-other" class="section level3">
 <h3>What is “Other”?</h3>
 <p>This is just a quickie function to list all of the classifications that fall into the “Other” category. There are many of them, but most are summary data and mis-spellings of terms that would have been caught by the classification algorithm if they were correct. Some are rare enough or non-specific enough to deserve the “Other” classification.</p>
